@@ -1,8 +1,8 @@
 # Multi Object Detection and Tracking
 
-Python, DeepSORT, YOLO8
+Python, DeepSORT, YOLO5
 
-• Implemented YOLO8 for object detection, Hungarian algorithm for feature association as part of Deep SORT multi
+• Implemented YOLO5 for object detection, Hungarian algorithm for feature association as part of Deep SORT multi
 object tracking
 ## Results
 
