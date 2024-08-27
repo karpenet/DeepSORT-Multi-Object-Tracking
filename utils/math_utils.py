@@ -2,9 +2,10 @@ from math import sqrt
 
 import numpy as np
 from math import exp
+from utils.typing import BBox
 
 
-def check_division_by_0(value, epsilon=0.01):
+def check_division_by_0(value: float, epsilon: float = 0.01) -> float:
     """
     Check for division by zero and adjust the value if necessary.
 
@@ -20,7 +21,7 @@ def check_division_by_0(value, epsilon=0.01):
     return value
 
 
-def sanchez_matilla(box1, box2, w=1280, h=360):
+def sanchez_matilla(box1: BBox, box2: BBox, w: int = 1280, h: int = 360) -> float:
     """
     Calculate the linear cost between two bounding boxes.
 
@@ -45,7 +46,7 @@ def sanchez_matilla(box1, box2, w=1280, h=360):
     return linear_cost
 
 
-def yu(box1, box2):
+def yu(box1: BBox, box2: BBox) -> float:
     """
     Calculate the exponential cost between two bounding boxes.
 
@@ -70,7 +71,7 @@ def yu(box1, box2):
     return exponential_cost
 
 
-def cosine_similarity(a, b, data_is_normalized=False):
+def cosine_similarity(a: np.ndarray, b: np.ndarray, data_is_normalized: bool = False) -> float:
     """
     Calculate the cosine similarity between two vectors.
 

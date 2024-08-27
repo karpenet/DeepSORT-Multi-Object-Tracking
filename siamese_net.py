@@ -1,12 +1,14 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from typing import Optional, Tuple
+from utils.typing import Image
 
 class SiameseNetwork(nn.Module):
     """
     Siamese network model.
     """
-    def __init__(self):
+    def __init__(self) -> None:
         super(SiameseNetwork, self).__init__()
 
         # Outputs batch X 512 X 1 X 1
@@ -46,7 +48,7 @@ class SiameseNetwork(nn.Module):
             nn.BatchNorm2d(1024),
         )
 
-    def forward_once(self, x):
+    def forward_once(self, x: Image) -> Image:
         """
         Forward pass for a single input.
 
@@ -60,7 +62,7 @@ class SiameseNetwork(nn.Module):
         output = torch.squeeze(output)
         return output
 
-    def forward(self, input1, input2, input3=None):
+    def forward(self, input1: Image, input2: Image, input3: Optional[Image] = None) -> Tuple[Image, Image, Optional[Image]]:
         """
         Forward pass for multiple inputs.
 
@@ -86,12 +88,12 @@ class ContrastiveLoss(torch.nn.Module):
     Contrastive loss function.
     Based on: http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
     """
-    def __init__(self, margin=2.0):
+    def __init__(self, margin: float = 2.0) -> None:
         super(ContrastiveLoss, self).__init__()
         self.margin = margin
         self.eps = 1e-9
 
-    def forward(self, output1, output2, label):
+    def forward(self, output1: Image, output2: Image, label: Image) -> Image:
         """
         Forward pass for the contrastive loss.
 
@@ -113,11 +115,11 @@ class TripletLoss(nn.Module):
     Triplet loss
     Takes embeddings of an anchor sample, a positive sample and a negative sample.
     """
-    def __init__(self, margin):
+    def __init__(self, margin: float) -> None:
         super(TripletLoss, self).__init__()
         self.margin = margin
 
-    def forward(self, anchor, positive, negative, size_average=True):
+    def forward(self, anchor: Image, positive: Image, negative: Image, size_average: bool = True) -> Image:
         """
         Forward pass for the triplet loss.
 
