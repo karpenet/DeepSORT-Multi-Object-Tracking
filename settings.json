@@ -1,0 +1,12 @@
+{
+    "editor.formatOnSave": true,
+    "python.formatting.provider": "none",
+    "editor.codeActionsOnSave": {
+        "source.fixAll": "explicit",
+        "source.organizeImports": "explicit"
+    },
+    "ruff.args": [
+        "--fix"  // Automatically apply fixes
+        // "--config", "${workspaceFolder}/pyproject.toml"  // Specify the config file path if necessary
+    ]
+}
