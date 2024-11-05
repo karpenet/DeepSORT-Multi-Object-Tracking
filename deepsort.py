@@ -13,8 +13,17 @@ from utils.logging import Logger
 MIN_HIT_STREAK = 1
 MAX_UNMATCHED_AGE = 1
 
+
 class Detection:
-    def __init__(self, idx: int, box: BBox, features: np.ndarray = None, age: int = 1, unmatched_age: int = 0) -> None:
+    def __init__(
+        self,
+        idx: int,
+        category: int,
+        box: BBox,
+        features: np.ndarray = None,
+        age: int = 1,
+        unmatched_age: int = 0,
+    ) -> None:
         """
         Initialize a detection object.
 
@@ -26,10 +35,12 @@ class Detection:
             unmatched_age (int): Number of frames the detection has been unmatched.
         """
         self.idx = idx
+        self.category = category
         self.box = box
         self.features = features
         self.age = age
         self.unmatched_age = unmatched_age
+
 
 class DeepSort:
     def __init__(self) -> None:
@@ -82,7 +93,9 @@ class DeepSort:
         exponential_cost = yu(old_box, new_box)
         feature_cost = cosine_similarity(old_features, new_features)[0][0]
 
-        self.logger.log(f"Computed costs - IOU: {iou_cost}, Linear: {linear_cost}, Exponential: {exponential_cost}, Feature: {feature_cost}")
+        self.logger.log(
+            f"Computed costs - IOU: {iou_cost}, Linear: {linear_cost}, Exponential: {exponential_cost}, Feature: {feature_cost}"
+        )
 
         if (
             iou_cost >= iou_thresh
@@ -112,7 +125,9 @@ class DeepSort:
         self.logger.log(f"Computed encoder features: {features}")
         return features
 
-    def detector_inference(self, frame: Image) -> Tuple[np.ndarray, BBoxList, List[int], List[float]]:
+    def detector_inference(
+        self, frame: Image
+    ) -> Tuple[np.ndarray, BBoxList, List[int], List[float]]:
         """
         Perform object detection on the given frame.
 
@@ -122,25 +137,32 @@ class DeepSort:
         Returns:
             tuple: Processed image with bounding boxes, list of bounding boxes, list of categories, list of scores.
         """
-        results = self.detector.predict(frame, device="cuda", conf=0.5, iou=0.4)
+        results = self.detector.predict(frame, device="cuda")
         predictions = results[0]
-        boxes = predictions.boxes.xywh
+        boxes = predictions.boxes.xyxy
         boxes_int = [[int(v) for v in box] for box in boxes]
         scores = predictions.boxes.conf
         categories = predictions.boxes.cls
         categories_int = [int(c) for c in categories]
         img_out = draw_bboxes(frame, boxes_int, categories_int, self.detector_classes)
 
-        self.logger.log(f"Detector inference results - Boxes: {boxes_int}, Categories: {categories_int}, Scores: {scores}")
+        self.logger.log(
+            f"Detector inference results - Boxes: {boxes_int}, Categories: {categories_int}, Scores: {scores}"
+        )
 
         return img_out, boxes_int, categories_int, scores
 
+    def _get_boxes(self, detections: List[Detection]):
+        return [detection.box for detection in detections]
+
+    def _get_features(self, detections: List[Detection]):
+        return [detection.features for detection in detections]
+
+    def _get_idx(self, detections: List[Detection]):
+        return [detection.idx for detection in detections]
+
     def associate(
-        self,
-        old_boxes: BBoxList,
-        new_boxes: BBoxList,
-        old_features: List[np.ndarray],
-        new_features: List[np.ndarray]
+        self, new_detections: List[Detection]
     ) -> Tuple[np.ndarray, List[int], List[int]]:
         """
         Associate old and new detections using the Hungarian algorithm.
@@ -154,6 +176,12 @@ class DeepSort:
         Returns:
             tuple: Matched indices, unmatched new detections, unmatched old detections.
         """
+        old_boxes = self._get_boxes(self.stored_obstacles)
+        new_boxes = self._get_boxes(new_detections)
+
+        old_features = self._get_features(self.stored_obstacles)
+        new_features = self._get_features(new_detections)
+
         if len(old_boxes) == 0 and len(new_boxes) == 0:
             return [], [], []
         elif len(old_boxes) == 0:
@@ -180,7 +208,9 @@ class DeepSort:
         hungarian_row, hungarian_col = linear_sum_assignment(-iou_matrix)
         hungarian_matrix = np.array(list(zip(hungarian_row, hungarian_col)))
 
-        self.logger.log(f"Hungarian algorithm results - Rows: {hungarian_row}, Columns: {hungarian_col}")
+        self.logger.log(
+            f"Hungarian algorithm results - Rows: {hungarian_row}, Columns: {hungarian_col}"
+        )
 
         # Create new unmatched lists for old and new boxes
         matches, unmatched_detections, unmatched_trackers = [], [], []
@@ -208,9 +238,19 @@ class DeepSort:
         else:
             matches = np.concatenate(matches, axis=0)
 
-        self.logger.log(f"Association results - Matches: {matches}, Unmatched Detections: {unmatched_detections}, Unmatched Trackers: {unmatched_trackers}")
+        self.logger.log(
+            f"Association results - Matches: {matches}, Unmatched Detections: {unmatched_detections}, Unmatched Trackers: {unmatched_trackers}"
+        )
 
         return matches, unmatched_detections, unmatched_trackers
+
+    def register_detections(
+        self, categories: List[int], bboxes: List[BBox], features: List[np.ndarray]
+    ) -> List[Detection]:
+        return [
+            Detection(idx=-1, category=categories[i], box=bboxes[i], features=features[i])
+            for i in range(len(bboxes))
+        ]
 
     def inference(self, frame: Image) -> Tuple[np.ndarray, List[Detection]]:
         """
@@ -226,7 +266,7 @@ class DeepSort:
         final_image = copy.deepcopy(frame)
         h, w, _ = final_image.shape
 
-        _, out_boxes, _, _ = self.detector_inference(frame)
+        _, out_boxes, out_categories, _ = self.detector_inference(frame)
         crops, crops_pytorch = crop_frames(final_image, out_boxes)
         features = self.get_encoder_features(crops_pytorch)
 
@@ -234,33 +274,39 @@ class DeepSort:
 
         # Define the list we'll return:
         new_obstacles = []
+        new_detections = self.register_detections(out_categories, out_boxes, features)
 
         old_obstacles = [
             obs.box for obs in self.stored_obstacles
         ]  # Simply get the boxes
         old_features = [obs.features for obs in self.stored_obstacles]
 
-        matches, unmatched_detections, unmatched_tracks = self.associate(
-            old_obstacles, out_boxes, old_features, features
-        )
+        matches, unmatched_detections, unmatched_tracks = self.associate(new_detections)
 
         # Matching
         for match in matches:
             obs = Detection(
                 self.stored_obstacles[match[0]].idx,
+                self.stored_obstacles[match[0]].category,
                 out_boxes[match[1]],
                 features[match[1]],
                 self.stored_obstacles[match[0]].age + 1,
             )
             new_obstacles.append(obs)
-            self.logger.log(f"Obstacle {obs.idx} with box: {obs.box} has been matched with obstacle {self.stored_obstacles[match[0]].box} and now has age: {obs.age}")
+            self.logger.log(
+                f"Obstacle {obs.idx} with box: {obs.box} has been matched with obstacle {self.stored_obstacles[match[0]].box} and now has age: {obs.age}"
+            )
 
         # New (Unmatched) Detections
         for d in unmatched_detections:
-            obs = Detection(self.idx, out_boxes[d], features[d])
+            obs = Detection(
+                self.idx, new_detections[d].category, out_boxes[d], features[d]
+            )
             new_obstacles.append(obs)
             self.idx += 1
-            self.logger.log(f"Obstacle {obs.idx} has been detected for the first time: {obs.box}")
+            self.logger.log(
+                f"Obstacle {obs.idx} has been detected for the first time: {obs.box}"
+            )
 
         # Unmatched Tracks
         for t in unmatched_tracks:
@@ -270,8 +316,10 @@ class DeepSort:
                 obs = self.stored_obstacles[i]
                 obs.unmatched_age += 1
                 new_obstacles.append(obs)
-                self.logger.log(f"Obstacle {obs.idx} is a long term obstacle unmatched {obs.unmatched_age} times.")
-
+                self.logger.log(
+                    f"Obstacle {obs.idx} is a long term obstacle unmatched {obs.unmatched_age} times."
+                )
+        
         # Draw the Boxes
         for i, obs in enumerate(new_obstacles):
             if obs.unmatched_age > MAX_UNMATCHED_AGE:
@@ -294,10 +342,12 @@ class DeepSort:
                     1,
                     map_id_to_bbox_color(obs.idx * 10),
                     thickness=4,
-                )
+                )        
 
         self.stored_obstacles = new_obstacles
 
-        self.logger.log("Final image with bounding boxes drawn and stored obstacles updated.")
+        self.logger.log(
+            "Final image with bounding boxes drawn and stored obstacles updated."
+        )
 
         return final_image, self.stored_obstacles
