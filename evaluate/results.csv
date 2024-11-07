@@ -1,0 +1,2 @@
+Total GT ,Total Detections ,ID Switches ,Mostly Tracked (MT) ,Mostly Lost (ML) ,Fragmentation ,False Positives (FP) ,False Negatives (FN) ,Precision            ,Recall               ,MOTA                ,MOTP                ,IDF1 Score
+    1476 ,            1693 ,        952 ,                  1 ,              35 ,         1457 ,                1674 ,                1457 ,0.011222681630242174 ,0.012872628726287264 ,-1.7662601626016259 ,0.23879004226336892 ,0.011991164405175133
