@@ -50,6 +50,7 @@ class DeepSort:
         self.logger = Logger()
         # Load object detector
         self.detector = YOLO("models/yolov8n.engine", task="detect")
+        self.tracking_classes = [1, 2, 3, 5, 7]
         with open("coco.names", "rt") as f:
             self.detector_classes = f.read().rstrip("\n").split("\n")
 
@@ -67,6 +68,7 @@ class DeepSort:
         new_box: BBox,
         old_features: np.ndarray,
         new_features: np.ndarray,
+        img_size: tuple = (1920, 1080),
         iou_thresh: float = 0.3,
         linear_thresh: float = 10000,
         exp_thresh: float = 0.5,
@@ -89,7 +91,7 @@ class DeepSort:
             float: Cost value based on the metrics.
         """
         iou_cost = compute_iou(old_box, new_box)
-        linear_cost = sanchez_matilla(old_box, new_box, w=1920, h=1080)
+        linear_cost = sanchez_matilla(old_box, new_box, w=img_size[0], h=img_size[1])
         exponential_cost = yu(old_box, new_box)
         feature_cost = cosine_similarity(old_features, new_features)[0][0]
 
@@ -137,7 +139,7 @@ class DeepSort:
         Returns:
             tuple: Processed image with bounding boxes, list of bounding boxes, list of categories, list of scores.
         """
-        results = self.detector.predict(frame, device="cuda")
+        results = self.detector.predict(frame, device="cuda", conf=0.5, iou=0.4, classes=self.tracking_classes)
         predictions = results[0]
         boxes = predictions.boxes.xyxy
         boxes_int = [[int(v) for v in box] for box in boxes]
@@ -162,7 +164,7 @@ class DeepSort:
         return [detection.idx for detection in detections]
 
     def associate(
-        self, new_detections: List[Detection]
+        self, new_detections: List[Detection], img_size: tuple = (1920, 1080),
     ) -> Tuple[np.ndarray, List[int], List[int]]:
         """
         Associate old and new detections using the Hungarian algorithm.
@@ -200,6 +202,7 @@ class DeepSort:
                     new_box,
                     old_features[i].reshape(1, 1024),
                     new_features[j].reshape(1, 1024),
+                    img_size=img_size,
                 )
 
         self.logger.log(f"IOU Matrix: {iou_matrix}")
@@ -281,7 +284,7 @@ class DeepSort:
         ]  # Simply get the boxes
         old_features = [obs.features for obs in self.stored_obstacles]
 
-        matches, unmatched_detections, unmatched_tracks = self.associate(new_detections)
+        matches, unmatched_detections, unmatched_tracks = self.associate(new_detections, img_size=(w, h))
 
         # Matching
         for match in matches:
@@ -336,8 +339,8 @@ class DeepSort:
                 )
                 final_image = cv2.putText(
                     final_image,
-                    str(obs.idx),
-                    (left - 10, top - 10),
+                    f"{self.detector_classes[obs.category]}: {str(obs.idx)}",
+                    (left, top - 10),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     1,
                     map_id_to_bbox_color(obs.idx * 10),

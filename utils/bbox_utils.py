@@ -33,7 +33,7 @@ def map_id_to_bbox_color(idx: int) -> Tuple[int, int, int]:
     red = idx * 23 % 256
     return (red, green, blue)
 
-def crop_frames(frame: Image, boxes: List[BBox]) -> Tuple[List[Image], torch.Tensor]:
+def crop_frames(frame: Image, boxes: List[BBox]):
     try:
         transforms = torchvision.transforms.Compose(
             [
@@ -52,15 +52,15 @@ def crop_frames(frame: Image, boxes: List[BBox]) -> Tuple[List[Image], torch.Ten
     except:
         return [], []
 
-def compute_iou(box1: BBox, box2: BBox, w: int = 1280, h: int = 360) -> float:
+def compute_iou(box1: BBox, box2: BBox) -> float:
     xA = max(box1[0], box2[0])
     yA = max(box1[1], box2[1])
     xB = min(box1[2], box2[2])
     yB = min(box1[3], box2[3])
 
-    inter_area = max(0, xB - xA + 1) * max(0, yA - yA + 1)
+    inter_area = max(0, xB - xA + 1) * max(0, yB - yA + 1)
     box1_area = (box1[2] - box1[0] + 1) * (box1[3] - box1[1] + 1)
     box2_area = (box2[2] - box2[0] + 1) * (box2[3] - box2[1] + 1)
     union_area = (box1_area + box2_area) - inter_area
-    iou = inter_area / float(union_area)
+    iou = inter_area / float(union_area) if union_area > 0 else 0
     return iou

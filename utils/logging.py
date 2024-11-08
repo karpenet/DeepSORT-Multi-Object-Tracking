@@ -7,7 +7,7 @@ class Logger:
         self.log_file = log_file
 
         # Create a file handler for logging
-        file_handler = logging.FileHandler(self.log_file)
+        file_handler = logging.FileHandler(self.log_file, mode='w')
         file_handler.setLevel(level)
 
         # Create a logging format

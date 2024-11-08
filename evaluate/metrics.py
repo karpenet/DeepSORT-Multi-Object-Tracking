@@ -8,7 +8,7 @@ import pandas as pd
 
 class_name_to_class_id = {
     "Car": 2,
-    "van": 2,
+    "van": 7,
     "truck": 7,
     "pedestrian": 0,
     "person": 0,
@@ -123,7 +123,7 @@ class EvaluateMOTS:
 
         return data_combined
 
-    def _preprocess_gt(self, data, convert_filter, ignore_filter):
+    def _preprocess_gt(self, data, convert_filter: dict = {}, ignore_filter: dict = {}):
         for col, ignore_list in ignore_filter.items():
             class_id = data.columns[col]
             data = data[~data[class_id].isin(ignore_list)]
