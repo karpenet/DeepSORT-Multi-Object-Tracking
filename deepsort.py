@@ -8,6 +8,7 @@ from utils.bbox_utils import crop_frames, draw_bboxes, compute_iou, map_id_to_bb
 from utils.math_utils import sanchez_matilla, cosine_similarity, yu
 from utils.typing import Image, BBoxList, BBox, List, Tuple, Tensor, FeatureVector
 from utils.logging import Logger
+from transformers import CLIPProcessor, CLIPModel
 
 # Constants for tracking
 MIN_HIT_STREAK = 1
@@ -51,13 +52,19 @@ class DeepSort:
         # Load object detector
         self.detector = YOLO("models/yolov8n.engine", task="detect")
         self.tracking_classes = [1, 2, 3, 5, 7]
+        # self.tracking_classes = [0]
         with open("coco.names", "rt") as f:
             self.detector_classes = f.read().rstrip("\n").split("\n")
+
+        # # Load CLIP Encoder
+        # self.encoder = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+        # self.preprocess = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
         # Load Siamese Network
         self.encoder = torch.load(
             "models/model640.pt", map_location=torch.device("cpu")
         )
+        self.encoder = torch.compile(self.encoder).to('cuda')
         self.encoder.eval()
         self.stored_obstacles = []
         self.idx = 0
@@ -108,6 +115,23 @@ class DeepSort:
             return iou_cost
         return 0
 
+    def get_clip_features(self, processed_crops: Tensor) -> FeatureVector:
+        # Load and preprocess the image
+        # Preprocess all images in the batch
+        images = [crop for crop in processed_crops]
+        image_input = self.preprocess(images=images, return_tensors="pt", padding=True)
+
+        # Compute image embeddings
+        features = []
+        if len(processed_crops) > 0:
+            with torch.no_grad():
+                features = self.encoder.get_image_features(**image_input)
+                features = features.detach().cpu().numpy()
+                if len(features.shape) == 1:
+                    features = np.expand_dims(features, 0)
+            self.logger.log(f"Computed encoder features: {features}")
+        return features
+
     def get_encoder_features(self, processed_crops: Tensor) -> FeatureVector:
         """
         Get features from the encoder for the given crops.
@@ -139,7 +163,8 @@ class DeepSort:
         Returns:
             tuple: Processed image with bounding boxes, list of bounding boxes, list of categories, list of scores.
         """
-        results = self.detector.predict(frame, device="cuda", conf=0.5, iou=0.4, classes=self.tracking_classes)
+        print(frame.shape)
+        results = self.detector.predict(frame, device="cuda", conf=0.5, iou=0.4, classes=self.tracking_classes, half=True)
         predictions = results[0]
         boxes = predictions.boxes.xyxy
         boxes_int = [[int(v) for v in box] for box in boxes]
